@@ -1,0 +1,748 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Assistant</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnpkg.com/chart.js/dist/chart.umd.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            background: #ef4444;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            background: #ef4444;
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        /* Custom scrollbar for tables */
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 8px;
+            width: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #d1d5db;
+            border-radius: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+    </style>
+</head>
+
+<body class="bg-white text-gray-800 h-screen flex overflow-hidden">
+
+    <!-- Sidebar -->
+    <aside class="w-64 bg-gray-50 border-r border-gray-200 flex flex-col flex-shrink-0">
+        <div class="p-6">
+            <h1 class="text-xl font-bold text-gray-800">Data Assistant</h1>
+        </div>
+        <nav class="flex-1 px-4 space-y-2">
+            <button onclick="switchTab('data-generation')" id="btn-data-generation"
+                class="w-full flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-100 transition-colors group">
+                <span id="dot-generation"
+                    class="w-2.5 h-2.5 rounded-full mr-3 border border-gray-400 group-hover:border-gray-500"></span>
+                Data Generation
+            </button>
+            <button onclick="switchTab('talk-to-data')" id="btn-talk-to-data"
+                class="w-full flex items-center px-4 py-2 text-sm font-medium rounded-md text-gray-700 hover:bg-gray-100 transition-colors group">
+                <span id="dot-talk"
+                    class="w-2.5 h-2.5 rounded-full mr-3 border border-gray-400 group-hover:border-gray-500"></span>
+                Talk to your data
+            </button>
+        </nav>
+        <div class="p-4 border-t border-gray-200">
+            <!-- Bottom sidebar content if needed -->
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="flex-1 overflow-auto bg-white p-8 relative">
+
+        <!-- Data Generation View -->
+        <div id="view-data-generation" class="max-w-5xl mx-auto space-y-8">
+            <!-- Prompt / File Upload -->
+            <section>
+                <h2 class="text-lg font-semibold mb-4">Prompt</h2>
+                <div class="bg-gray-100 rounded-lg p-3 mb-4">
+                    <input type="text" placeholder="Enter your prompt here..."
+                        class="w-full bg-transparent border-none focus:ring-0 text-gray-600 text-sm placeholder-gray-400"
+                        disabled>
+                </div>
+
+                <div class="border-2 border-dashed border-gray-200 rounded-lg p-8 bg-gray-50 flex flex-row items-center justify-between"
+                    id="dropzone">
+                    <div class="flex flex-col space-y-2">
+                        <span class="font-medium text-gray-700">Drag and drop file here</span>
+                        <span class="text-xs text-gray-400">Limit 200MB per file • SQL, DDL, TXT, JSON</span>
+                        <div class="mt-2">
+                            <label for="file-upload"
+                                class="cursor-pointer bg-white border border-gray-200 text-gray-700 px-4 py-1.5 rounded text-sm font-medium hover:bg-gray-50 inline-block shadow-sm">
+                                Browse files
+                            </label>
+                            <input id="file-upload" type="file" class="hidden" accept=".ddl,.sql">
+                        </div>
+                    </div>
+                    <div class="text-xs text-gray-400">
+                        Supported formats: SQL, JSON
+                    </div>
+                </div>
+                <!-- File name display -->
+                <div id="file-info"
+                    class="hidden mt-2 p-3 bg-white border border-gray-200 rounded shadow-sm flex justify-between items-center w-64">
+                    <div class="flex items-center truncate">
+                        <svg class="w-4 h-4 text-gray-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                            </path>
+                        </svg>
+                        <span id="file-name" class="text-sm text-gray-600 truncate">schema.ddl</span>
+                    </div>
+                    <button onclick="clearFile()" class="text-gray-400 hover:text-gray-600">×</button>
+                </div>
+            </section>
+
+            <!-- Advanced Parameters -->
+            <section>
+                <h2 class="text-lg font-semibold mb-4">Advanced Parameters</h2>
+                <div class="flex items-center space-x-12">
+                    <div class="flex-1">
+                        <div class="flex justify-between mb-1">
+                            <label class="text-sm font-medium text-gray-700">Temperature</label>
+                            <span id="temp-val" class="text-xs text-red-500 font-medium">0.50</span>
+                        </div>
+                        <div class="relative w-full h-1 bg-gray-200 rounded">
+                            <!-- Using a range input for simplicity -->
+                            <input type="range" min="0" max="1" step="0.01" value="0.5" id="temperature"
+                                class="slider absolute w-full h-full opacity-100 z-10 appearance-none bg-transparent">
+                            <div class="absolute h-full bg-red-500 rounded" style="width: 50%" id="temp-bar"></div>
+                        </div>
+                    </div>
+                    <div class="flex-1">
+                        <label class="text-sm font-medium text-gray-700 block mb-1">Max Tokens</label>
+                        <input type="number" id="max-tokens" value="2000"
+                            class="w-full bg-gray-100 border-none rounded text-sm p-2 text-gray-700 focus:ring-0">
+                    </div>
+                </div>
+            </section>
+
+            <!-- Generate Button & Progress -->
+            <section class="space-y-4">
+                <button onclick="generateData()" id="btn-generate"
+                    class="bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-6 rounded text-sm transition-colors shadow-sm">
+                    Generate
+                </button>
+
+                <div id="progress-container" class="hidden">
+                    <div id="progress-message"
+                        class="text-green-600 bg-green-50 px-4 py-2 rounded text-sm font-medium mb-2 inline-block">
+                        Found tables...
+                    </div>
+                    <div class="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+                        <div id="progress-bar" class="h-full bg-blue-500 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Data Preview -->
+            <section>
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold">Data Preview</h2>
+                    <div class="bg-gray-100 rounded px-2 py-1 text-xs text-gray-500">
+                        Total rows: <span id="total-rows">0</span>
+                    </div>
+                </div>
+
+                <!-- Preview Table Container -->
+                <div class="border border-gray-200 rounded-lg overflow-hidden bg-white min-h-[200px] flex flex-col">
+                    <div id="preview-placeholder"
+                        class="flex-1 flex items-center justify-center bg-blue-50 text-blue-800 text-sm font-medium p-4">
+                        No data generated yet. Upload a DDL schema and click Generate.
+                    </div>
+                    <div id="preview-content" class="hidden overflow-x-auto custom-scrollbar">
+                        <table class="min-w-full divide-y divide-gray-200" id="preview-table">
+                            <thead class="bg-gray-50" id="preview-head"></thead>
+                            <tbody class="divide-y divide-gray-200" id="preview-body"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Filter -->
+            <section class="bg-gray-50 p-1 rounded-lg flex items-center">
+                <input type="text" id="filter-input" placeholder="Enter quick edit instructions..."
+                    class="flex-1 bg-transparent border-none focus:ring-0 text-sm p-2 text-gray-700"
+                    onkeydown="if(event.key==='Enter') applyFilter()">
+                <button onclick="applyFilter()"
+                    class="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded text-sm font-medium transition-colors">Submit</button>
+            </section>
+        </div>
+
+
+        <!-- Talk to Data View -->
+        <div id="view-talk-to-data" class="hidden max-w-6xl mx-auto space-y-6">
+            <h1 class="text-2xl font-bold text-gray-800">Talk to your data</h1>
+
+            <!-- Available Tables Accordion -->
+            <div class="border border-gray-200 rounded-lg bg-white shadow-sm overflow-hidden">
+                <button onclick="toggleTables()"
+                    class="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-left text-sm font-medium text-gray-700">
+                    <span class="flex items-center">
+                        <svg id="chevron-tables" class="w-4 h-4 mr-2 transform transition-transform" fill="none"
+                            stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7">
+                            </path>
+                        </svg>
+                        View available tables
+                    </span>
+                </button>
+                <div id="tables-list" class="hidden p-4 space-y-4 max-h-96 overflow-y-auto custom-scrollbar bg-white"
+                    data-loaded="false">
+                    <!-- Tables will be loaded here via JS -->
+                    <div class="text-sm text-gray-500 text-center">Loading tables...</div>
+                </div>
+            </div>
+
+            <!-- Chat Area -->
+            <div id="chat-history" class="space-y-8 pb-32">
+                <!-- Chat items will be appended here -->
+            </div>
+
+            <!-- Chat Input (Fixed at bottom or static? Design shows static but usually fixed is better. Following 'Google Data Assistant' style typical layout) -->
+            <!-- The design implies it's static at the bottom of the content, but let's make it fixed for better UX if content grows? 
+                 Actually, screenshot 4 shows input bar. Let's place it at the bottom. -->
+
+            <div
+                class="fixed bottom-0 left-64 right-0 p-6 bg-gradient-to-t from-white via-white to-transparent pointer-events-none">
+                <div
+                    class="pointer-events-auto max-w-6xl mx-auto bg-gray-100 p-2 rounded-lg flex items-center shadow-lg border border-gray-200">
+                    <input type="text" id="chat-input" placeholder="Ask a question about your data..."
+                        class="flex-1 bg-transparent border-none focus:ring-0 text-sm p-2 text-gray-700 font-medium"
+                        onkeydown="if(event.key==='Enter') sendQuery()">
+                    <button onclick="sendQuery()"
+                        class="ml-2 p-2 bg-gray-200 rounded text-gray-500 hover:bg-gray-300 hover:text-gray-700 transition-colors">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M14 5l7 7m0 0l-7 7m7-7H3"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="max-w-6xl mx-auto flex justify-between mt-2 pointer-events-auto">
+                    <div>
+                        <!-- Download buttons place holder if we want them always visible? Or just per result. Screenshot shows at bottom right sometimes. -->
+                        <a href="/download-zip"
+                            class="text-xs text-gray-500 hover:text-gray-700 underline mr-4">Download All (ZIP)</a>
+                        <button onclick="clearChat()" class="text-xs text-red-400 hover:text-red-500">Clear
+                            chat</button>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <script>
+        // State
+        let currentTab = 'data-generation';
+        let uploadedFile = null;
+
+        // --- Navigation ---
+        function switchTab(tab) {
+            currentTab = tab;
+            const genBtn = document.getElementById('btn-data-generation');
+            const talkBtn = document.getElementById('btn-talk-to-data');
+            const genDot = document.getElementById('dot-generation');
+            const talkDot = document.getElementById('dot-talk');
+
+            if (tab === 'data-generation') {
+                document.getElementById('view-data-generation').classList.remove('hidden');
+                document.getElementById('view-talk-to-data').classList.add('hidden');
+
+                genDot.className = "w-2.5 h-2.5 rounded-full mr-3 bg-red-500 border-none";
+                talkDot.className = "w-2.5 h-2.5 rounded-full mr-3 border border-gray-400 group-hover:border-gray-500";
+            } else {
+                document.getElementById('view-data-generation').classList.add('hidden');
+                document.getElementById('view-talk-to-data').classList.remove('hidden');
+
+                genDot.className = "w-2.5 h-2.5 rounded-full mr-3 border border-gray-400 group-hover:border-gray-500";
+                talkDot.className = "w-2.5 h-2.5 rounded-full mr-3 bg-red-500 border-none";
+
+                loadAvailableTables();
+            }
+        }
+
+        // Initialize defaults
+        switchTab('data-generation');
+
+        // --- Data Generation Logic ---
+        const fileInput = document.getElementById('file-upload');
+        const dropzone = document.getElementById('dropzone');
+        const temperatureInput = document.getElementById('temperature');
+        const tempVal = document.getElementById('temp-val');
+        const tempBar = document.getElementById('temp-bar');
+
+        temperatureInput.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value).toFixed(2);
+            tempVal.innerText = val;
+            tempBar.style.width = (val * 100) + '%';
+        });
+
+        fileInput.addEventListener('change', handleFileSelect);
+
+        // Simple Drag and drop
+        dropzone.addEventListener('dragover', (e) => { e.preventDefault(); dropzone.classList.add('border-red-400'); });
+        dropzone.addEventListener('dragleave', (e) => { e.preventDefault(); dropzone.classList.remove('border-red-400'); });
+        dropzone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropzone.classList.remove('border-red-400');
+            if (e.dataTransfer.files.length) {
+                fileInput.files = e.dataTransfer.files; // Assign to input
+                handleFileSelect({ target: fileInput });
+            }
+        });
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            uploadedFile = file;
+            document.getElementById('file-info').classList.remove('hidden');
+            document.getElementById('file-name').innerText = file.name;
+            dropzone.classList.add('hidden');
+
+            // Upload immediately to set schema
+            uploadDDL(file);
+        }
+
+        function clearFile() {
+            uploadedFile = null;
+            fileInput.value = '';
+            document.getElementById('file-info').classList.add('hidden');
+            dropzone.classList.remove('hidden');
+        }
+
+        async function uploadDDL(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const res = await fetch('/upload-ddl', { method: 'POST', body: formData });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    alert('Error uploading schema: ' + errText);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+
+        async function generateData() {
+            if (!uploadedFile) {
+                alert('Please upload a DDL file first.');
+                return;
+            }
+
+            const btn = document.getElementById('btn-generate');
+            const progress = document.getElementById('progress-container');
+            const pBar = document.getElementById('progress-bar');
+
+            btn.disabled = true;
+            btn.classList.add('opacity-50');
+            progress.classList.remove('hidden');
+
+            // Fake progress animation
+            let p = 0;
+            const intv = setInterval(() => {
+                p += Math.random() * 10;
+                if (p > 90) p = 90;
+                pBar.style.width = p + '%';
+            }, 500);
+
+            try {
+                const temp = parseFloat(document.getElementById('temperature').value);
+                const maxTokens = parseInt(document.getElementById('max-tokens').value);
+
+                const res = await fetch('/generate-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ temperature: temp, maxTokens: maxTokens })
+                });
+
+                clearInterval(intv);
+                pBar.style.width = '100%';
+
+                if (!res.ok) throw await res.text();
+
+                const data = await res.json();
+
+                renderPreviewTable(data.preview);
+                document.getElementById('preview-placeholder').classList.add('hidden');
+                document.getElementById('preview-content').classList.remove('hidden');
+                document.getElementById('total-rows').innerText = data.preview ? data.preview.length : 0;
+
+            } catch (err) {
+                alert('Generation failed: ' + err);
+            } finally {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50');
+                setTimeout(() => progress.classList.add('hidden'), 2000);
+            }
+        }
+
+
+        function renderPreviewTable(data) {
+            const thead = document.getElementById('preview-head');
+            const tbody = document.getElementById('preview-body');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            if (!data || data.length === 0) return;
+
+            // Store data for sorting
+            currentPreviewData = data;
+
+            const cols = Object.keys(data[0]);
+
+            const trHead = document.createElement('tr');
+            cols.forEach(col => {
+                const th = document.createElement('th');
+                th.className = "px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100";
+                th.innerText = col;
+                th.onclick = () => sortTable(col);
+                trHead.appendChild(th);
+            });
+            thead.appendChild(trHead);
+
+            data.forEach((row, i) => {
+                const tr = document.createElement('tr');
+                tr.className = i % 2 === 0 ? 'bg-white' : 'bg-gray-50';
+                cols.forEach(col => {
+                    const td = document.createElement('td');
+                    td.className = "px-6 py-4 whitespace-nowrap text-sm text-gray-500";
+                    td.innerText = row[col];
+                    tr.appendChild(td);
+                });
+                tbody.appendChild(tr);
+            });
+        }
+
+        // Store current preview data for sorting
+        let currentPreviewData = [];
+        let sortState = { column: null, ascending: true };
+
+        function sortTable(col) {
+            if (!currentPreviewData || currentPreviewData.length === 0) return;
+
+            // Toggle sort direction if clicking same column
+            if (sortState.column === col) {
+                sortState.ascending = !sortState.ascending;
+            } else {
+                sortState.column = col;
+                sortState.ascending = true;
+            }
+
+            // Sort the data
+            const sorted = [...currentPreviewData].sort((a, b) => {
+                let valA = a[col];
+                let valB = b[col];
+
+                // Handle different types
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+
+                if (valA < valB) return sortState.ascending ? -1 : 1;
+                if (valA > valB) return sortState.ascending ? 1 : -1;
+                return 0;
+            });
+
+            renderPreviewTable(sorted);
+        }
+
+        async function applyFilter() {
+            const filterInput = document.getElementById('filter-input');
+            const instruction = filterInput.value.trim();
+            if (!instruction) {
+                alert('Please enter filter instructions');
+                return;
+            }
+
+            try {
+                const res = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: instruction })
+                });
+
+                if (!res.ok) throw await res.text();
+
+                const data = await res.json();
+
+                // Update preview table with filtered results
+                if (data.result && data.result.length > 0) {
+                    renderPreviewTable(data.result);
+                    document.getElementById('total-rows').innerText = data.result.length;
+                    filterInput.value = '';
+                } else {
+                    alert('No results found for your filter');
+                }
+
+            } catch (err) {
+                alert('Filter failed: ' + err);
+            }
+        }
+
+
+        // --- Talk to Data Logic ---
+
+        let tablesLoaded = false;
+        async function loadAvailableTables() {
+            if (tablesLoaded) return;
+            const container = document.getElementById('tables-list');
+
+            try {
+                const res = await fetch('/list-tables');
+                if (!res.ok) throw new Error('Failed to load tables');
+
+                const tables = await res.json();
+
+                if (!tables || tables.length === 0) {
+                    container.innerHTML = '<div class="p-4 text-sm text-gray-500">No tables found. Generate some data first!</div>';
+                    tablesLoaded = true;
+                    return;
+                }
+
+                let html = '';
+                tables.forEach(table => {
+                    html += `
+                        <div class="border-b border-gray-100 last:border-0">
+                            <div class="font-medium text-sm text-gray-700 mb-2">${table.name}</div>
+                            <div class="overflow-x-auto max-h-48 custom-scrollbar">
+                                <table class="min-w-full text-xs">
+                                    <thead class="bg-gray-50">
+                                        <tr>
+                    `;
+
+                    if (table.data && table.data.length > 0) {
+                        const cols = Object.keys(table.data[0]);
+                        cols.forEach(col => {
+                            html += `<th class="px-3 py-2 text-left font-medium text-gray-500 uppercase">${col}</th>`;
+                        });
+                        html += `</tr></thead><tbody class="divide-y divide-gray-100">`;
+
+                        table.data.forEach((row, idx) => {
+                            html += `<tr class="${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">`;
+                            cols.forEach(col => {
+                                html += `<td class="px-3 py-2 text-gray-600">${row[col] || ''}</td>`;
+                            });
+                            html += `</tr>`;
+                        });
+                    } else {
+                        html += `<th class="px-3 py-2">No data</th></tr></thead><tbody>`;
+                    }
+
+                    html += `</tbody></table></div></div>`;
+                });
+
+                container.innerHTML = html;
+                tablesLoaded = true;
+
+            } catch (e) {
+                container.innerHTML = '<div class="p-4 text-sm text-red-500">Error loading tables: ' + e.message + '</div>';
+            }
+        }
+
+        function toggleTables() {
+            const list = document.getElementById('tables-list');
+            const chev = document.getElementById('chevron-tables');
+            if (list.classList.contains('hidden')) {
+                list.classList.remove('hidden');
+                chev.classList.add('rotate-180');
+            } else {
+                list.classList.add('hidden');
+                chev.classList.remove('rotate-0'); // fix rotation logic
+                chev.classList.remove('rotate-180');
+            }
+        }
+
+        async function sendQuery() {
+            const input = document.getElementById('chat-input');
+            const prompt = input.value.trim();
+            if (!prompt) return;
+
+            // Add user message
+            addChatMessage('user', prompt);
+            input.value = '';
+
+            try {
+                const res = await fetch('/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ prompt: prompt })
+                });
+
+                if (!res.ok) {
+                    if (res.status === 403) throw "Operation blocked by security policy.";
+                    throw "Analysis failed.";
+                }
+
+                const data = await res.json();
+                addChatMessage('ai', data);
+
+            } catch (err) {
+                addChatMessage('error', err);
+            }
+        }
+
+        function clearChat() {
+            document.getElementById('chat-history').innerHTML = '';
+        }
+
+        function addChatMessage(role, data) {
+            const history = document.getElementById('chat-history');
+            const div = document.createElement('div');
+
+            if (role === 'user') {
+                div.className = "flex justify-end";
+                div.innerHTML = `
+                    <div class="bg-gray-100 text-gray-800 rounded-2xl rounded-tr-sm px-6 py-3 max-w-2xl text-sm font-medium">
+                        ${data}
+                    </div>
+                `;
+            } else if (role === 'error') {
+                div.className = "flex justify-start";
+                div.innerHTML = `
+                    <div class="bg-red-50 border border-red-100 text-red-600 rounded-lg px-6 py-3 max-w-2xl text-sm">
+                        ${data}
+                    </div>
+                `;
+            } else {
+                // AI Response
+                // 1. SQL Block
+                // 2. Table or Chart
+                const chartId = 'chart-' + Date.now();
+                div.className = "space-y-4 w-full";
+
+                let contentHTML = '';
+
+                // SQL Snippet
+                contentHTML += `
+                    <div class="bg-blue-50 border border-blue-100 rounded-md p-3 font-mono text-xs text-blue-700 flex items-center overflow-x-auto">
+                        <span class="font-bold mr-2 text-blue-400">SQL</span>
+                        ${data.sql}
+                    </div>
+                `;
+
+                // Chart or Table
+                if (data.isChart) {
+                    contentHTML += `
+                         <div class="bg-white border border-gray-200 rounded-lg p-6 h-64 w-full">
+                            <canvas id="${chartId}"></canvas>
+                         </div>
+                    `;
+                } else if (data.result && data.result.length > 0) {
+                    // Table
+                    const cols = Object.keys(data.result[0]);
+                    let thead = '';
+                    cols.forEach(c => thead += `<th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">${c}</th>`);
+
+                    let tbody = '';
+                    data.result.forEach((row, idx) => {
+                        tbody += `<tr class="${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}">`;
+                        cols.forEach(c => tbody += `<td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${row[c]}</td>`);
+                        tbody += `</tr>`;
+                    });
+
+                    contentHTML += `
+                        <div class="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm">
+                            <div class="overflow-x-auto">
+                                <table class="min-w-full divide-y divide-gray-200">
+                                    <thead class="bg-gray-50"><tr>${thead}</tr></thead>
+                                    <tbody class="divide-y divide-gray-200">${tbody}</tbody>
+                                </table>
+                            </div>
+                         </div>
+                     `;
+                } else {
+                    contentHTML += `<div class="text-sm text-gray-500 italic">No results found.</div>`;
+                }
+
+                div.innerHTML = contentHTML;
+
+                // Render chart if needed
+                setTimeout(() => {
+                    if (data.isChart && data.result) {
+                        renderChart(chartId, data.result, data.chartType);
+                    }
+                }, 100);
+            }
+            history.appendChild(div);
+            // Scroll to bottom
+            window.scrollTo(0, document.body.scrollHeight);
+        }
+
+        function renderChart(canvasId, data, type) {
+            // Basic chart rendering logic
+            // Assuming data is like [{label: 'A', value: 10}...] or we guess columns
+            if (data.length === 0) return;
+
+            const keys = Object.keys(data[0]);
+            // Heuristic using the first string col as label and first number col as data
+            let labelKey = keys.find(k => typeof data[0][k] === 'string') || keys[0];
+            let valueKey = keys.find(k => typeof data[0][k] === 'number') || keys[1];
+
+            const ctx = document.getElementById(canvasId).getContext('2d');
+
+            // Map chart types
+            // "pie", "bar", "line", "doughnut"
+            let cType = 'bar';
+            if (type && type.includes('pie')) cType = 'pie';
+            if (type && type.includes('line')) cType = 'line';
+
+            new Chart(ctx, {
+                type: cType,
+                data: {
+                    labels: data.map(d => d[labelKey]),
+                    datasets: [{
+                        label: valueKey,
+                        data: data.map(d => d[valueKey]),
+                        backgroundColor: [
+                            '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'
+                        ],
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: cType !== 'pie' ? {
+                        y: { beginAtZero: true }
+                    } : {}
+                }
+            });
+        }
+    </script>
+</body>
+
+</html>
