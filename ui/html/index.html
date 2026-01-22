@@ -6,8 +6,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Data Assistant</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnpkg.com/chart.js/dist/chart.umd.js"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="icon" href="data:,">
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -264,6 +264,9 @@
 
     </main>
 
+    </main>
+
+    <script src="https://unpkg.com/chart.js@4.4.1/dist/chart.umd.js"></script>
     <script>
         // State
         let currentTab = 'data-generation';
@@ -402,8 +405,14 @@
                 document.getElementById('preview-content').classList.remove('hidden');
                 document.getElementById('total-rows').innerText = data.preview ? data.preview.length : 0;
 
+
             } catch (err) {
-                alert('Generation failed: ' + err);
+                const errMsg = String(err);
+                if (errMsg.includes('duplicate key') || errMsg.includes('unique constraint')) {
+                    alert('Generation failed: Duplicate data detected.\n\nTip: Re-upload your DDL file to drop and recreate the table, then try generating again.');
+                } else {
+                    alert('Generation failed: ' + err);
+                }
             } finally {
                 btn.disabled = false;
                 btn.classList.remove('opacity-50');
@@ -702,41 +711,72 @@
             window.scrollTo(0, document.body.scrollHeight);
         }
 
+
         function renderChart(canvasId, data, type) {
             // Basic chart rendering logic
-            // Assuming data is like [{label: 'A', value: 10}...] or we guess columns
-            if (data.length === 0) return;
+            if (!data || data.length === 0) return;
 
             const keys = Object.keys(data[0]);
-            // Heuristic using the first string col as label and first number col as data
-            let labelKey = keys.find(k => typeof data[0][k] === 'string') || keys[0];
-            let valueKey = keys.find(k => typeof data[0][k] === 'number') || keys[1];
 
-            const ctx = document.getElementById(canvasId).getContext('2d');
+            // Heuristic: first column is label, second is value
+            let labelKey = keys[0];
+            let valueKey = keys[1];
+
+            // Try to find a better match: string for label, number-like for value
+            const stringKey = keys.find(k => {
+                const val = data[0][k];
+                return typeof val === 'string' && isNaN(val);
+            });
+            const numberKey = keys.find(k => {
+                const val = data[0][k];
+                return !isNaN(val) && val !== null && val !== '';
+            });
+
+            if (stringKey) labelKey = stringKey;
+            if (numberKey) valueKey = numberKey;
+
+            const ctx = document.getElementById(canvasId);
+            if (!ctx) {
+                console.error('Canvas not found:', canvasId);
+                return;
+            }
 
             // Map chart types
-            // "pie", "bar", "line", "doughnut"
             let cType = 'bar';
-            if (type && type.includes('pie')) cType = 'pie';
-            if (type && type.includes('line')) cType = 'line';
+            if (type && type.toLowerCase().includes('pie')) cType = 'pie';
+            if (type && type.toLowerCase().includes('line')) cType = 'line';
+            if (type && type.toLowerCase().includes('doughnut')) cType = 'doughnut';
 
-            new Chart(ctx, {
+            if (typeof window.Chart === 'undefined') {
+                console.error('Chart.js library is not loaded');
+                alert('La librería de gráficos aún no se ha cargado. Por favor, espera un momento o recarga la página.');
+                return;
+            }
+
+            new window.Chart(ctx.getContext('2d'), {
                 type: cType,
                 data: {
-                    labels: data.map(d => d[labelKey]),
+                    labels: data.map(d => String(d[labelKey])),
                     datasets: [{
                         label: valueKey,
-                        data: data.map(d => d[valueKey]),
+                        data: data.map(d => parseFloat(d[valueKey]) || 0),
                         backgroundColor: [
-                            '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6'
+                            '#3b82f6', '#ef4444', '#10b981', '#f59e0b', '#8b5cf6',
+                            '#ec4899', '#14b8a6', '#f97316', '#6366f1', '#84cc16'
                         ],
-                        borderWidth: 1
+                        borderWidth: 1,
+                        borderColor: '#fff'
                     }]
                 },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
-                    scales: cType !== 'pie' ? {
+                    plugins: {
+                        legend: {
+                            display: cType === 'pie' || cType === 'doughnut'
+                        }
+                    },
+                    scales: cType !== 'pie' && cType !== 'doughnut' ? {
                         y: { beginAtZero: true }
                     } : {}
                 }

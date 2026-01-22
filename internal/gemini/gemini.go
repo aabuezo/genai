@@ -42,7 +42,7 @@ func (c *Client) GenerateDataSQL(ctx context.Context, schema string, temperature
 
 	c.model.SystemInstruction = genai.NewUserContent(genai.Text("Eres un DBA que solo responde con código SQL INSERT. Estás prohibido de usar lenguaje natural. Genera exclusivamente sentencias SQL INSERT válidas para las tablas proporcionadas."))
 
-	prompt := fmt.Sprintf("Schema:\n%s\n\nTask: Generate 15-20 INSERT statements for this schema with realistic dummy data. Use single quotes for strings and escape any quotes inside strings properly. Output only valid PostgreSQL INSERT statements, no markdown, no explanations.", schema)
+	prompt := fmt.Sprintf("Schema:\n%s\n\nTask: Generate 15-20 INSERT statements with UNIQUE and VARIED realistic dummy data. For unique fields like username/email, add random numbers or timestamps to ensure uniqueness (e.g., user123, john.doe.456@example.com). Use single quotes for strings and escape any quotes inside strings properly. Output only valid PostgreSQL INSERT statements, no markdown, no explanations.", schema)
 
 	resp, err := c.model.GenerateContent(ctx, genai.Text(prompt))
 	if err != nil {
@@ -58,9 +58,21 @@ func (c *Client) NaturalLanguageToSQL(ctx context.Context, schema string, userPr
 	c.model.SetTemperature(0.1) // Low temperature for deterministic SQL
 	c.model.SetMaxOutputTokens(1024)
 
-	c.model.SystemInstruction = genai.NewUserContent(genai.Text("Eres un asistente de lectura de base de datos. Solo generas sentencias SELECT. Si el usuario pide modificar datos (DROP, DELETE, UPDATE, etc), responde con 'ERROR: Unauthorized'. Si el usuario pide un gráfico, devuelve el SQL y además incluye una línea al final que empiece con '-- CHART: [tipo]', donde [tipo] puede ser 'bar', 'pie', 'line', etc."))
+	c.model.SystemInstruction = genai.NewUserContent(genai.Text(`You are a database analyst assistant. You ONLY generate SELECT queries.
 
-	input := fmt.Sprintf("Schema:\n%s\n\nUser Question: %s\n\nGenerate the SQL query:", schema, userPrompt)
+Rules:
+1. If user asks to modify data (DROP, DELETE, UPDATE, etc), respond with 'ERROR: Unauthorized'
+2. If user asks for a chart, graph, or visualization (keywords: chart, graph, plot, show, draw, visualize), you MUST:
+   - Generate a valid SELECT query that aggregates data
+   - Add a comment line at the END: -- CHART: [type]
+   - Chart types: bar, pie, line, doughnut
+3. Output ONLY the SQL query with no explanations
+
+Examples:
+- "show a bar chart of restaurants by city" → SELECT city, COUNT(*) as count FROM restaurants GROUP BY city; -- CHART: bar
+- "draw a pie chart of users by country" → SELECT country, COUNT(*) as total FROM users GROUP BY country; -- CHART: pie`))
+
+	input := fmt.Sprintf("Schema:\n%s\n\nUser Question: %s\n\nGenerate the SQL query (remember to add -- CHART: comment if visualization is requested):", schema, userPrompt)
 
 	resp, err := c.model.GenerateContent(ctx, genai.Text(input))
 	if err != nil {
